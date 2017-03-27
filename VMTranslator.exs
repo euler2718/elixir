@@ -52,6 +52,7 @@ defmodule Vmtranslator do
 		#worded = ~s/#{file}/
 		path = Path.rootname(file)
 		File.stream!(file)
+			#truthfully it seems I should only need to pass the path on the LAST VM line
 			# I may be able to reduce below to Stream.with_index ; THEN Stream.filter_map
 			#|> Stream.filter_map( &( String.match?( &1, ~r{^\w.+$} ) ), &clean/1 ) 
 			|> Stream.filter( &( String.match?( &1, ~r{^\w.+$} ) )) #this is going to have to clear in-line comments
@@ -104,24 +105,34 @@ defmodule Vmtranslator do
 			@0
 			M=M+1
 			"""
-			{cmd, loc, qty} -> cmdParse({cmd,loc,qty}, path)
-			{ g } -> arithmetic(g,ind)
+			{ flow, string } -> cmdParse( { flow, string }, path)
+			{ cmd, loc, qty } -> cmdParse( { cmd, loc, qty }, path )
+			{ g } -> arithmetic( g, ind )
 		end
 	end
 
 	def cmdParse({a,b,c}, path) do
 		case b do
-			"local" -> _cmdParse({a, "@LCL\nA=M", c})	
-			"argument" -> _cmdParse({a, "@ARG\nA=M", c})
-			"this" -> _cmdParse({a, "@THIS\nA=M", c})
-			"that" -> _cmdParse({a, "@THAT\nA=M", c})
-	 		"temp" -> _cmdParse({a, "@R5", c})
-	 		"pointer" -> _cmdParse({a, "@R3", c})
-			"static" -> _cmdParse({a, "@#{Path.basename(path) |> Path.rootname}.#{c}", 0})
+			"local" -> _cmdParse( {a, "@LCL\nA=M", c } )	
+			"argument" -> _cmdParse( { a, "@ARG\nA=M", c } )
+			"this" -> _cmdParse( { a, "@THIS\nA=M", c } )
+			"that" -> _cmdParse( { a, "@THAT\nA=M", c } )
+	 		"temp" -> _cmdParse( { a, "@R5", c } )
+	 		"pointer" -> _cmdParse( { a, "@R3", c } )
+			"static" -> _cmdParse( { a, "@#{Path.basename(path) |> Path.rootname}.#{c}", 0 } )
 		end
 	end
 
-	defp _cmdParse({"push", loc, qty}) do 
+	def cmdParse( {flow, string }, path ) do
+		case flow do
+			"label" -> "(#{string})\n"
+			"goto" -> "@" <> string <> "\n0;JMP\n"
+			#assuming the prior conditional left a boolean
+			"if-goto" -> "@SP\nA=M-1\nD=M\n@1\nD=D+A\n@#{string}\nD;JEQ\n"
+		end
+	end
+
+	defp _cmdParse( { "push", loc, qty } ) do 
 		"#{loc}\n"<> String.duplicate("A=A+1\n", qty) <> "D=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n"
 	end
 
